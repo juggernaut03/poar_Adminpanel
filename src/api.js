@@ -66,6 +66,8 @@ export const api = {
 
   // Costs (landed COGS)
   landedCogs: () => request('/admin/costs/landed'),
+  getCostSettings: () => request('/admin/costs/settings'),
+  updateCostSettings: (data) => request('/admin/costs/settings', { method: 'PUT', body: data }),
   listBatches: () => request('/admin/costs/batches'),
   createBatch: (data) => request('/admin/costs/batches', { method: 'POST', body: data }),
   deleteBatch: (id) => request(`/admin/costs/batches/${id}`, { method: 'DELETE' }),
