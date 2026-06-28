@@ -4,6 +4,90 @@ import { api } from '../api.js';
 const usd = (n) =>
   (n < 0 ? '-' : '') + '$' + Math.abs(Number(n || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const GREEN = '#15803d';
+const RED = '#dc2626';
+
+// Visual profit/loss table: a diverging bar per product + margin %, with
+// money-maker / loss-maker row tinting so winners and losers are obvious.
+function ProfitTable({ products }) {
+  const maxAbs = Math.max(1, ...products.map((p) => Math.abs(p.profit || 0)));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 0.7fr 1.4fr 0.9fr 0.9fr', gap: 12, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--muted)', padding: '0 12px' }}>
+        <span>Product</span><span style={{ textAlign: 'right' }}>Units</span>
+        <span>Profit / loss</span><span style={{ textAlign: 'right' }}>Margin</span><span style={{ textAlign: 'right' }}>Profit</span>
+      </div>
+      {products.map((p) => {
+        const has = p.profit != null;
+        const win = has && p.profit >= 0;
+        const margin = has && p.netAfterAmazon ? (p.profit / p.netAfterAmazon) * 100 : null;
+        const barW = has ? (Math.abs(p.profit) / maxAbs) * 100 : 0;
+        return (
+          <div key={p.product} style={{
+            display: 'grid', gridTemplateColumns: '1.7fr 0.7fr 1.4fr 0.9fr 0.9fr', gap: 12, alignItems: 'center',
+            padding: '10px 12px', borderRadius: 10,
+            background: !has ? '#fafafa' : win ? 'rgba(21,128,61,0.06)' : 'rgba(220,38,38,0.06)',
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {win && has && <span title="profitable" style={{ color: GREEN }}>▲ </span>}
+              {!win && has && <span title="loss-making" style={{ color: RED }}>▼ </span>}
+              {p.product}
+              {p.sku && <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {p.sku}</span>}
+            </div>
+            <div style={{ textAlign: 'right', fontSize: 13 }}>{p.unitsKept}</div>
+            {/* diverging bar centered on zero */}
+            <div style={{ position: 'relative', height: 18, background: 'transparent' }}>
+              <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--line)' }} />
+              {has && (
+                <div style={{
+                  position: 'absolute', top: 3, height: 12, borderRadius: 3,
+                  background: win ? GREEN : RED,
+                  ...(win
+                    ? { left: '50%', width: `${barW / 2}%` }
+                    : { right: '50%', width: `${barW / 2}%` }),
+                }} />
+              )}
+            </div>
+            <div style={{ textAlign: 'right', fontSize: 13, color: margin == null ? 'var(--muted)' : margin >= 0 ? GREEN : RED }}>
+              {margin == null ? '—' : `${margin.toFixed(0)}%`}
+            </div>
+            <div style={{ textAlign: 'right', fontWeight: 700, fontSize: 13.5, color: !has ? 'var(--muted)' : win ? GREEN : RED }}>
+              {has ? usd(p.profit) : 'set cost'}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Compact horizontal waterfall from gross net down to the bottom line.
+function Waterfall({ steps }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'stretch' }}>
+      {steps.map((s, i) => {
+        const isTotal = s.kind === 'total';
+        const isNeg = s.kind === 'neg';
+        return (
+          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              minWidth: 150, padding: '10px 14px', borderRadius: 10,
+              border: isTotal ? `2px solid ${s.value >= 0 ? GREEN : RED}` : '1px solid var(--line)',
+              background: isTotal ? (s.value >= 0 ? 'rgba(21,128,61,0.06)' : 'rgba(220,38,38,0.06)') : '#fff',
+            }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>{s.label}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: isTotal ? (s.value >= 0 ? GREEN : RED) : isNeg ? RED : 'var(--ink)' }}>
+                {usd(s.value)}
+              </div>
+            </div>
+            {i < steps.length - 1 && <span style={{ color: 'var(--muted)', fontSize: 18 }}>→</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // Dependency-free SVG line chart for the daily sales series.
 function TrendChart({ data }) {
   if (!data.length) return <div className="empty">No sales data for this range.</div>;
@@ -154,43 +238,32 @@ export default function Finance() {
           {/* True net profit (after Amazon fees AND COGS) */}
           {profit && profit.products?.length > 0 && (
             <div className="panel" style={{ marginBottom: 20 }}>
-              <h2 style={{ fontSize: 17, marginBottom: 4 }}>True Net Profit (after Amazon fees + COGS)</h2>
-              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 }}>
-                Profit = Amazon net (incl. refunds) − (units kept × your cost). Service/storage fees are
-                applied to the bottom line.
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                <h2 style={{ fontSize: 17 }}>True Net Profit <span style={{ color: 'var(--muted)', fontWeight: 500, fontSize: 14 }}>(after Amazon fees + your cost)</span></h2>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: profit.netProfit >= 0 ? '#15803d' : '#dc2626' }}>{usd(profit.netProfit)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>net profit</div>
+                </div>
+              </div>
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 16 }}>
+                Per product: profit = Amazon net (incl. refunds) − units kept × your cost.
                 {profit.unmappedProducts > 0 && (
-                  <span style={{ color: '#b45309' }}> {profit.unmappedProducts} product(s) still missing a cost.</span>
+                  <span style={{ color: '#b45309' }}> {profit.unmappedProducts} product(s) need a cost — set it in Products.</span>
                 )}
               </p>
 
-              <table>
-                <thead>
-                  <tr><th>Product</th><th>Units kept</th><th>Net after Amazon</th><th>COGS/unit</th><th>COGS total</th><th>Profit</th></tr>
-                </thead>
-                <tbody>
-                  {profit.products.map((p) => (
-                    <tr key={p.product}>
-                      <td style={{ fontWeight: 600 }}>{p.product}{p.sku ? <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {p.sku}</span> : ''}</td>
-                      <td>{p.unitsKept}</td>
-                      <td>{usd(p.netAfterAmazon)}</td>
-                      <td>{p.cogsPerUnit != null ? usd(p.cogsPerUnit) : <span style={{ color: '#b45309' }}>— set cost —</span>}</td>
-                      <td>{p.cogsTotal != null ? usd(p.cogsTotal) : '—'}</td>
-                      <td style={{ fontWeight: 700, color: p.profit == null ? 'var(--muted)' : p.profit >= 0 ? '#15803d' : '#dc2626' }}>
-                        {p.profit != null ? usd(p.profit) : 'n/a'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ProfitTable products={profit.products} />
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 18 }}>
-                <div className="stat"><div className="num">{usd(profit.productProfit)}</div><div className="lbl">Product profit</div></div>
-                <div className="stat"><div className="num" style={{ color: '#dc2626' }}>{usd(profit.totalCogs)}</div><div className="lbl">Total COGS</div></div>
-                <div className="stat"><div className="num" style={{ color: '#dc2626' }}>{usd(profit.serviceFees)}</div><div className="lbl">Service / storage fees</div></div>
-                <div className="stat" style={{ borderColor: profit.netProfit >= 0 ? '#15803d' : '#dc2626', borderWidth: 2 }}>
-                  <div className="num" style={{ color: profit.netProfit >= 0 ? '#15803d' : '#dc2626' }}>{usd(profit.netProfit)}</div>
-                  <div className="lbl">NET PROFIT (bottom line)</div>
-                </div>
+              {/* Waterfall to the bottom line */}
+              <div style={{ marginTop: 20, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+                <Waterfall
+                  steps={[
+                    { label: 'Net after Amazon', value: profit.netAfterAmazon, kind: 'base' },
+                    { label: 'Less: cost of goods', value: -profit.totalCogs, kind: 'neg' },
+                    { label: 'Less: storage/service fees', value: profit.serviceFees, kind: 'neg' },
+                    { label: 'Net profit', value: profit.netProfit, kind: 'total' },
+                  ]}
+                />
               </div>
             </div>
           )}
