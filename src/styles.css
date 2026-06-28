@@ -23,8 +23,15 @@ input, textarea, select, button { font-family: inherit; font-size: 14px; }
 .login-card .sub { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 24px; }
 
 /* ---------- Layout ---------- */
-.shell { display: grid; grid-template-columns: var(--sidebar) 1fr; min-height: 100vh; }
-.sidebar { background: #11151c; color: #c7cdd6; padding: 20px 14px; display: flex; flex-direction: column; }
+.shell { min-height: 100vh; }
+/* Sidebar is fixed to the viewport so it stays put while content scrolls. */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar);
+  background: #11151c; color: #c7cdd6; padding: 20px 14px;
+  display: flex; flex-direction: column;
+  overflow-y: auto; z-index: 40;
+}
 .sidebar .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: #fff; padding: 6px 10px 22px; }
 .sidebar .logo-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--brand); display: grid; place-items: center; }
 .sidebar .logo-mark svg { width: 20px; height: 20px; }
@@ -38,8 +45,15 @@ input, textarea, select, button { font-family: inherit; font-size: 14px; }
 .sidebar .logout { padding: 10px 12px; font-size: 14px; color: #c7cdd6; cursor: pointer; border-radius: 8px; }
 .sidebar .logout:hover { background: #1b212b; color: #fff; }
 
-.main { padding: 28px 32px; overflow: auto; }
-.topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+/* Main content sits to the right of the fixed sidebar and scrolls normally. */
+.main { margin-left: var(--sidebar); padding: 28px 32px; min-height: 100vh; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: -28px -32px 24px; padding: 18px 32px;
+  background: rgba(245,246,248,0.85); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 30;
+}
 .topbar h1 { font-size: 24px; }
 .topbar .who { font-size: 13px; color: var(--muted); }
 

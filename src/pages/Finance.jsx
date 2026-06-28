@@ -181,6 +181,12 @@ export default function Finance() {
     ? Math.abs((summary.refunds / summary.grossSales) * 100)
     : 0;
 
+  // top-products now returns clean labels from the server.
+  const topRows = (top || []).map((t) => ({
+    name: t.product, net: t.net, gross: t.gross, fees: t.fees, orders: t.orders,
+  }));
+  const topMax = Math.max(1, ...topRows.map((t) => t.net));
+
   return (
     <>
       <div className="topbar">
@@ -277,37 +283,44 @@ export default function Finance() {
           {/* Top products + fee breakdown */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 20 }}>
             <div className="panel">
-              <h2 style={{ fontSize: 17, marginBottom: 12 }}>Top Products by Net</h2>
-              {top.length === 0 ? <div className="empty">No order data.</div> : (
-                <table>
-                  <thead><tr><th>Product</th><th>Orders</th><th>Fees</th><th>Net</th></tr></thead>
-                  <tbody>
-                    {top.map((p) => (
-                      <tr key={p.product}>
-                        <td style={{ fontSize: 13 }}>{p.product}</td>
-                        <td>{p.orders}</td>
-                        <td style={{ color: '#dc2626' }}>{usd(p.fees)}</td>
-                        <td style={{ fontWeight: 700 }}>{usd(p.net)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <h2 style={{ fontSize: 17, marginBottom: 14 }}>Top Products by Revenue</h2>
+              {topRows.length === 0 ? <div className="empty">No order data.</div> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {topRows.map((p) => {
+                    const w = (p.net / topMax) * 100;
+                    return (
+                      <div key={p.name}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13.5 }}>{p.name}</span>
+                          <span style={{ fontWeight: 700, fontSize: 13.5 }}>{usd(p.net)}</span>
+                        </div>
+                        <div style={{ height: 8, background: '#f0f1f3', borderRadius: 5, overflow: 'hidden' }}>
+                          <div style={{ width: `${w}%`, height: '100%', background: 'var(--brand)', borderRadius: 5 }} />
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>
+                          {p.orders} orders · fees {usd(p.fees)} ({Math.abs((p.fees / p.gross) * 100).toFixed(0)}%)
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
             <div className="panel">
-              <h2 style={{ fontSize: 17, marginBottom: 12 }}>Breakdown by Type</h2>
-              <table>
-                <tbody>
-                  {Object.entries(summary.byType || {}).sort((a, b) => b[1].total - a[1].total).map(([type, v]) => (
-                    <tr key={type}>
-                      <td style={{ fontWeight: 600 }}>{type}</td>
-                      <td style={{ color: 'var(--muted)' }}>{v.count}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: v.total < 0 ? '#dc2626' : 'var(--ink)' }}>{usd(v.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <h2 style={{ fontSize: 17, marginBottom: 14 }}>Breakdown by Type</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {Object.entries(summary.byType || {}).sort((a, b) => b[1].total - a[1].total).map(([type, v]) => (
+                  <div key={type} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: v.total < 0 ? RED : GREEN }} />
+                      <span style={{ fontWeight: 600, fontSize: 13.5 }}>{type}</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 12 }}>×{v.count}</span>
+                    </div>
+                    <span style={{ fontWeight: 700, fontSize: 13.5, color: v.total < 0 ? RED : 'var(--ink)' }}>{usd(v.total)}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </>
