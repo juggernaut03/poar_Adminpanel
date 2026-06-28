@@ -7,6 +7,12 @@ export const tokenStore = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 };
 
+// Build a query string from non-empty params, e.g. {from,to} -> "?from=..&to=.."
+function qs(params) {
+  const entries = Object.entries(params).filter(([, v]) => v != null && v !== '');
+  return entries.length ? `?${new URLSearchParams(Object.fromEntries(entries))}` : '';
+}
+
 async function request(path, { method = 'GET', body, isForm = false } = {}) {
   const headers = {};
   const token = tokenStore.get();
@@ -51,6 +57,17 @@ export const api = {
   createCategory: (data) => request('/admin/categories', { method: 'POST', body: data }),
   updateCategory: (id, data) => request(`/admin/categories/${id}`, { method: 'PUT', body: data }),
   deleteCategory: (id) => request(`/admin/categories/${id}`, { method: 'DELETE' }),
+
+  // Finance
+  financeSummary: (params = {}) => request(`/admin/finance/summary${qs(params)}`),
+  financeSalesTrend: (params = {}) => request(`/admin/finance/sales-trend${qs(params)}`),
+  financeTopProducts: (params = {}) => request(`/admin/finance/top-products${qs(params)}`),
+  financeTransactions: (params = {}) => request(`/admin/finance/transactions${qs(params)}`),
+  financeImport: (type, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request(`/admin/finance/import?type=${type}`, { method: 'POST', body: fd, isForm: true });
+  },
 
   // Uploads
   upload: (files) => {

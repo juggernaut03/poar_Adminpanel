@@ -15,11 +15,16 @@ const NAV = [
     ],
   },
   {
+    group: 'Business',
+    items: [
+      { to: '/finance', label: 'Finance & P&L' },
+    ],
+  },
+  {
     group: 'Coming soon',
     items: [
       { label: 'Amazon Shipment', soon: true },
       { label: 'Accounts', soon: true },
-      { label: 'Finance', soon: true },
     ],
   },
 ];

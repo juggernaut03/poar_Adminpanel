@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Products from './pages/Products.jsx';
 import Categories from './pages/Categories.jsx';
+import Finance from './pages/Finance.jsx';
 import Cms from './pages/Cms.jsx';
 
 function Protected({ children }) {
@@ -22,6 +23,7 @@ export default function App() {
       <Route path="/" element={<Protected><Dashboard /></Protected>} />
       <Route path="/products" element={<Protected><Products /></Protected>} />
       <Route path="/categories" element={<Protected><Categories /></Protected>} />
+      <Route path="/finance" element={<Protected><Finance /></Protected>} />
       <Route path="/cms" element={<Protected><Cms /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
