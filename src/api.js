@@ -62,6 +62,7 @@ export const api = {
   financeSummary: (params = {}) => request(`/admin/finance/summary${qs(params)}`),
   financeSalesTrend: (params = {}) => request(`/admin/finance/sales-trend${qs(params)}`),
   financeTopProducts: (params = {}) => request(`/admin/finance/top-products${qs(params)}`),
+  financeProfit: (params = {}) => request(`/admin/finance/profit${qs(params)}`),
   financeTransactions: (params = {}) => request(`/admin/finance/transactions${qs(params)}`),
   financeImport: (type, file) => {
     const fd = new FormData();

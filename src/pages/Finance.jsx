@@ -76,6 +76,7 @@ export default function Finance() {
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState([]);
   const [top, setTop] = useState([]);
+  const [profit, setProfit] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -84,8 +85,9 @@ export default function Finance() {
       api.financeSummary(range).catch(() => null),
       api.financeSalesTrend(range).catch(() => []),
       api.financeTopProducts({ ...range, limit: 8 }).catch(() => []),
-    ]).then(([s, t, tp]) => {
-      setSummary(s); setTrend(t || []); setTop(tp || []);
+      api.financeProfit(range).catch(() => null),
+    ]).then(([s, t, tp, pr]) => {
+      setSummary(s); setTrend(t || []); setTop(tp || []); setProfit(pr);
     }).finally(() => setLoading(false));
   };
 
@@ -148,6 +150,50 @@ export default function Finance() {
             Add per-product cost in Products to compute true net profit. Refund rate: <strong>{refundRate.toFixed(1)}%</strong> ·
             Transactions: <strong>{summary.transactionCount}</strong>. Reserve-balance entries are excluded.
           </div>
+
+          {/* True net profit (after Amazon fees AND COGS) */}
+          {profit && profit.products?.length > 0 && (
+            <div className="panel" style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: 17, marginBottom: 4 }}>True Net Profit (after Amazon fees + COGS)</h2>
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 }}>
+                Profit = Amazon net (incl. refunds) − (units kept × your cost). Service/storage fees are
+                applied to the bottom line.
+                {profit.unmappedProducts > 0 && (
+                  <span style={{ color: '#b45309' }}> {profit.unmappedProducts} product(s) still missing a cost.</span>
+                )}
+              </p>
+
+              <table>
+                <thead>
+                  <tr><th>Product</th><th>Units kept</th><th>Net after Amazon</th><th>COGS/unit</th><th>COGS total</th><th>Profit</th></tr>
+                </thead>
+                <tbody>
+                  {profit.products.map((p) => (
+                    <tr key={p.product}>
+                      <td style={{ fontWeight: 600 }}>{p.product}{p.sku ? <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {p.sku}</span> : ''}</td>
+                      <td>{p.unitsKept}</td>
+                      <td>{usd(p.netAfterAmazon)}</td>
+                      <td>{p.cogsPerUnit != null ? usd(p.cogsPerUnit) : <span style={{ color: '#b45309' }}>— set cost —</span>}</td>
+                      <td>{p.cogsTotal != null ? usd(p.cogsTotal) : '—'}</td>
+                      <td style={{ fontWeight: 700, color: p.profit == null ? 'var(--muted)' : p.profit >= 0 ? '#15803d' : '#dc2626' }}>
+                        {p.profit != null ? usd(p.profit) : 'n/a'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 18 }}>
+                <div className="stat"><div className="num">{usd(profit.productProfit)}</div><div className="lbl">Product profit</div></div>
+                <div className="stat"><div className="num" style={{ color: '#dc2626' }}>{usd(profit.totalCogs)}</div><div className="lbl">Total COGS</div></div>
+                <div className="stat"><div className="num" style={{ color: '#dc2626' }}>{usd(profit.serviceFees)}</div><div className="lbl">Service / storage fees</div></div>
+                <div className="stat" style={{ borderColor: profit.netProfit >= 0 ? '#15803d' : '#dc2626', borderWidth: 2 }}>
+                  <div className="num" style={{ color: profit.netProfit >= 0 ? '#15803d' : '#dc2626' }}>{usd(profit.netProfit)}</div>
+                  <div className="lbl">NET PROFIT (bottom line)</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Sales trend */}
           <div className="panel" style={{ marginBottom: 20 }}>
