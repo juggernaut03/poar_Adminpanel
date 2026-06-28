@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
 const EMPTY = {
   title: '', shortDescription: '', description: '', amazonUrl: '',
-  price: '', mrp: '', currency: 'INR', category: 'General', brand: '',
+  price: '', mrp: '', currency: 'INR', category: 'General', subcategory: '', brand: '',
   rating: '', ratingCount: '',
   images: [], tags: '', isPublished: true, isFeatured: false, sortOrder: 0,
 };
@@ -15,9 +15,18 @@ export default function ProductEditor({ initial, onClose, onSaved }) {
       ? { ...EMPTY, ...initial, tags: (initial.tags || []).join(', '), price: initial.price ?? '', mrp: initial.mrp ?? '', rating: initial.rating ?? '', ratingCount: initial.ratingCount ?? '' }
       : EMPTY
   );
+  const [categories, setCategories] = useState([]);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    api.listCategories().then(setCategories).catch(() => {});
+  }, []);
+
+  // Subcategory options follow the selected category.
+  const activeCat = categories.find((c) => c.name === form.category);
+  const subOptions = activeCat?.subcategories || [];
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -95,9 +104,28 @@ export default function ProductEditor({ initial, onClose, onSaved }) {
         </div>
 
         <div className="row">
-          <div className="field"><label>Category</label><input value={form.category} onChange={(e) => set('category', e.target.value)} /></div>
-          <div className="field"><label>Brand</label><input value={form.brand} onChange={(e) => set('brand', e.target.value)} /></div>
+          <div className="field">
+            <label>Category</label>
+            <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value, subcategory: '' }))}>
+              {!categories.some((c) => c.name === form.category) && form.category && (
+                <option value={form.category}>{form.category}</option>
+              )}
+              {categories.map((c) => <option key={c._id} value={c.name}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Subcategory</label>
+            <select value={form.subcategory || ''} onChange={(e) => set('subcategory', e.target.value)} disabled={!subOptions.length}>
+              <option value="">— none —</option>
+              {!subOptions.includes(form.subcategory) && form.subcategory && (
+                <option value={form.subcategory}>{form.subcategory}</option>
+              )}
+              {subOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
         </div>
+
+        <div className="field"><label>Brand</label><input value={form.brand} onChange={(e) => set('brand', e.target.value)} /></div>
 
         <div className="row">
           <div className="field"><label>Price</label><input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} /></div>

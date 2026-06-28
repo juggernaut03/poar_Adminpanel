@@ -54,8 +54,11 @@ export default function Products() {
                 <tr key={p._id}>
                   <td>{p.images?.[0] ? <img className="thumb" src={p.images[0]} alt="" /> : <div className="thumb" />}</td>
                   <td style={{ fontWeight: 600 }}>{p.title}{p.isFeatured && ' ⭐'}</td>
-                  <td>{p.category}</td>
-                  <td>{p.price != null ? `₹${Number(p.price).toLocaleString('en-IN')}` : '—'}</td>
+                  <td>
+                    {p.category}
+                    {p.subcategory && <span style={{ color: 'var(--muted)', fontSize: 12, display: 'block' }}>{p.subcategory}</span>}
+                  </td>
+                  <td>{p.price != null ? `${p.currency === 'USD' ? '$' : '₹'}${Number(p.price).toLocaleString(p.currency === 'USD' ? 'en-US' : 'en-IN')}` : '—'}</td>
                   <td><span className={`badge ${p.isPublished ? 'on' : 'off'}`}>{p.isPublished ? 'Published' : 'Draft'}</span></td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditing(p)}>Edit</button>{' '}

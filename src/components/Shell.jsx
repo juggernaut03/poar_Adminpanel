@@ -10,6 +10,7 @@ const NAV = [
     items: [
       { to: '/', label: 'Dashboard', end: true },
       { to: '/products', label: 'Products' },
+      { to: '/categories', label: 'Categories' },
       { to: '/cms', label: 'Website CMS' },
     ],
   },

@@ -46,6 +46,12 @@ export const api = {
   upsertContent: (key, label, data) =>
     request(`/admin/content/${key}`, { method: 'PUT', body: { label, data } }),
 
+  // Categories
+  listCategories: () => request('/admin/categories'),
+  createCategory: (data) => request('/admin/categories', { method: 'POST', body: data }),
+  updateCategory: (id, data) => request(`/admin/categories/${id}`, { method: 'PUT', body: data }),
+  deleteCategory: (id) => request(`/admin/categories/${id}`, { method: 'DELETE' }),
+
   // Uploads
   upload: (files) => {
     const fd = new FormData();
