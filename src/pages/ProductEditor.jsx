@@ -3,7 +3,7 @@ import { api } from '../api.js';
 
 const EMPTY = {
   title: '', shortDescription: '', description: '', amazonUrl: '',
-  price: '', mrp: '', cost: '', currency: 'INR', category: 'General', subcategory: '', brand: '',
+  price: '', mrp: '', cost: '', weightGrams: '', currency: 'INR', category: 'General', subcategory: '', brand: '',
   rating: '', ratingCount: '',
   images: [], tags: '', isPublished: true, isFeatured: false, sortOrder: 0,
 };
@@ -12,7 +12,7 @@ export default function ProductEditor({ initial, onClose, onSaved }) {
   const editing = Boolean(initial?._id);
   const [form, setForm] = useState(() =>
     initial
-      ? { ...EMPTY, ...initial, tags: (initial.tags || []).join(', '), price: initial.price ?? '', mrp: initial.mrp ?? '', cost: initial.cost ?? '', rating: initial.rating ?? '', ratingCount: initial.ratingCount ?? '' }
+      ? { ...EMPTY, ...initial, tags: (initial.tags || []).join(', '), price: initial.price ?? '', mrp: initial.mrp ?? '', cost: initial.cost ?? '', weightGrams: initial.weightGrams ?? '', rating: initial.rating ?? '', ratingCount: initial.ratingCount ?? '' }
       : EMPTY
   );
   const [categories, setCategories] = useState([]);
@@ -61,6 +61,7 @@ export default function ProductEditor({ initial, onClose, onSaved }) {
       price: form.price === '' ? null : Number(form.price),
       mrp: form.mrp === '' ? null : Number(form.mrp),
       cost: form.cost === '' ? null : Number(form.cost),
+      weightGrams: form.weightGrams === '' ? null : Number(form.weightGrams),
       rating: form.rating === '' ? null : Number(form.rating),
       ratingCount: form.ratingCount === '' ? 0 : Number(form.ratingCount),
       sortOrder: Number(form.sortOrder) || 0,
@@ -133,10 +134,17 @@ export default function ProductEditor({ initial, onClose, onSaved }) {
           <div className="field"><label>MRP</label><input type="number" value={form.mrp} onChange={(e) => set('mrp', e.target.value)} /></div>
         </div>
 
-        <div className="field" style={{ maxWidth: 220 }}>
-          <label>Cost / COGS (per unit)</label>
-          <input type="number" step="0.01" value={form.cost} onChange={(e) => set('cost', e.target.value)} placeholder="your cost price" />
-          <div className="hint">Used for true profit in Finance.</div>
+        <div className="row">
+          <div className="field">
+            <label>Cost / COGS override (per unit, $)</label>
+            <input type="number" step="0.01" value={form.cost} onChange={(e) => set('cost', e.target.value)} placeholder="leave blank to auto-compute" />
+            <div className="hint">Overrides landed COGS. Leave blank to use purchase + shipping from Costs.</div>
+          </div>
+          <div className="field">
+            <label>Shipping weight (grams)</label>
+            <input type="number" value={form.weightGrams} onChange={(e) => set('weightGrams', e.target.value)} placeholder="e.g. 1200" />
+            <div className="hint">Splits inbound shipping cost across a shipment.</div>
+          </div>
         </div>
 
         <div className="row">

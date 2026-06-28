@@ -63,6 +63,18 @@ export const api = {
   financeSalesTrend: (params = {}) => request(`/admin/finance/sales-trend${qs(params)}`),
   financeTopProducts: (params = {}) => request(`/admin/finance/top-products${qs(params)}`),
   financeProfit: (params = {}) => request(`/admin/finance/profit${qs(params)}`),
+
+  // Costs (landed COGS)
+  landedCogs: () => request('/admin/costs/landed'),
+  listBatches: () => request('/admin/costs/batches'),
+  createBatch: (data) => request('/admin/costs/batches', { method: 'POST', body: data }),
+  deleteBatch: (id) => request(`/admin/costs/batches/${id}`, { method: 'DELETE' }),
+  listShipments: () => request('/admin/costs/shipments'),
+  createShipment: (data) => request('/admin/costs/shipments', { method: 'POST', body: data }),
+  deleteShipment: (id) => request(`/admin/costs/shipments/${id}`, { method: 'DELETE' }),
+  listOverheads: () => request('/admin/costs/overheads'),
+  createOverhead: (data) => request('/admin/costs/overheads', { method: 'POST', body: data }),
+  deleteOverhead: (id) => request(`/admin/costs/overheads/${id}`, { method: 'DELETE' }),
   financeTransactions: (params = {}) => request(`/admin/finance/transactions${qs(params)}`),
   financeImport: (type, file) => {
     const fd = new FormData();

@@ -1,0 +1,191 @@
+import { useEffect, useState } from 'react';
+import { api } from '../api.js';
+
+const usd = (n) => (n == null ? '—' : (n < 0 ? '-' : '') + '$' + Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+export default function Costs() {
+  const [products, setProducts] = useState([]);
+  const [batches, setBatches] = useState([]);
+  const [shipments, setShipments] = useState([]);
+  const [overheads, setOverheads] = useState([]);
+  const [landed, setLanded] = useState({});
+  const [msg, setMsg] = useState(null);
+
+  const reload = () => {
+    api.listProducts().then((r) => setProducts(r.items || []));
+    api.listBatches().then(setBatches).catch(() => {});
+    api.listShipments().then(setShipments).catch(() => {});
+    api.listOverheads().then(setOverheads).catch(() => {});
+    api.landedCogs().then(setLanded).catch(() => {});
+  };
+  useEffect(() => { reload(); }, []);
+
+  const skuOptions = products.filter((p) => p.sku).map((p) => ({ sku: p.sku, title: p.title }));
+  const titleFor = (sku) => skuOptions.find((s) => s.sku === sku)?.title || sku;
+
+  const flash = (t, ok = true) => { setMsg({ ok, t }); setTimeout(() => setMsg(null), 2500); };
+
+  return (
+    <>
+      <div className="topbar"><h1>Costs &amp; Landed COGS</h1></div>
+      {msg && <div className={msg.ok ? 'ok' : 'err'}>{msg.t}</div>}
+
+      <p style={{ color: 'var(--muted)', fontSize: 13.5, marginBottom: 20, maxWidth: 820 }}>
+        Enter costs in <strong>USD</strong>. Landed COGS per unit = purchase cost + inbound shipping (split
+        across a shipment by product weight). Rent &amp; packaging overheads are allocated across units sold
+        in the Finance date range.
+      </p>
+
+      {/* Computed landed COGS */}
+      <div className="panel" style={{ marginBottom: 22 }}>
+        <h2 style={{ fontSize: 17, marginBottom: 12 }}>Computed Landed COGS</h2>
+        <table>
+          <thead><tr><th>Product</th><th>SKU</th><th>Purchase/unit</th><th>Shipping/unit</th><th>Override</th><th>Landed/unit</th></tr></thead>
+          <tbody>
+            {Object.entries(landed).filter(([, v]) => v.hasData).sort((a, b) => (b[1].landed || 0) - (a[1].landed || 0)).map(([sku, v]) => (
+              <tr key={sku}>
+                <td style={{ fontWeight: 600 }}>{titleFor(sku).slice(0, 42)}</td>
+                <td>{sku}</td>
+                <td>{usd(v.purchasePerUnit)}</td>
+                <td>{usd(v.shippingPerUnit)}</td>
+                <td>{v.manualOverride != null ? usd(v.manualOverride) : '—'}</td>
+                <td style={{ fontWeight: 800, color: 'var(--brand)' }}>{usd(v.landed)}</td>
+              </tr>
+            ))}
+            {Object.values(landed).filter((v) => v.hasData).length === 0 && (
+              <tr><td colSpan={6} className="empty">No cost data yet. Add purchase batches and shipments below.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <PurchaseSection batches={batches} skuOptions={skuOptions} titleFor={titleFor} reload={reload} flash={flash} />
+      <ShipmentSection shipments={shipments} skuOptions={skuOptions} reload={reload} flash={flash} />
+      <OverheadSection overheads={overheads} reload={reload} flash={flash} />
+    </>
+  );
+}
+
+function PurchaseSection({ batches, skuOptions, titleFor, reload, flash }) {
+  const [f, setF] = useState({ sku: '', quantity: '', totalCost: '', note: '' });
+  const add = async () => {
+    if (!f.sku || !f.quantity || !f.totalCost) return flash('SKU, quantity and total cost are required', false);
+    try {
+      await api.createBatch({ ...f, quantity: Number(f.quantity), totalCost: Number(f.totalCost), productTitle: titleFor(f.sku) });
+      setF({ sku: '', quantity: '', totalCost: '', note: '' }); reload(); flash('Purchase batch added');
+    } catch (e) { flash(e.message, false); }
+  };
+  return (
+    <div className="panel" style={{ marginBottom: 22 }}>
+      <h2 style={{ fontSize: 17, marginBottom: 12 }}>Purchase Batches</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr auto', gap: 10, alignItems: 'end', marginBottom: 14 }}>
+        <Field label="Product"><select value={f.sku} onChange={(e) => setF({ ...f, sku: e.target.value })}><option value="">— select —</option>{skuOptions.map((s) => <option key={s.sku} value={s.sku}>{s.title.slice(0, 40)} ({s.sku})</option>)}</select></Field>
+        <Field label="Quantity"><input type="number" value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} /></Field>
+        <Field label="Total cost $"><input type="number" step="0.01" value={f.totalCost} onChange={(e) => setF({ ...f, totalCost: e.target.value })} /></Field>
+        <Field label="Note"><input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
+        <button className="btn" onClick={add}>Add</button>
+      </div>
+      <CostTable rows={batches} cols={[
+        ['Product', (b) => b.productTitle || titleFor(b.sku)],
+        ['Qty', (b) => b.quantity],
+        ['Total', (b) => usd(b.totalCost)],
+        ['Per unit', (b) => usd(b.totalCost / b.quantity)],
+      ]} onDelete={(id) => api.deleteBatch(id).then(() => { reload(); flash('Deleted'); })} />
+    </div>
+  );
+}
+
+function ShipmentSection({ shipments, skuOptions, reload, flash }) {
+  const [cost, setCost] = useState('');
+  const [ref, setRef] = useState('');
+  const [lines, setLines] = useState([{ sku: '', units: '' }]);
+  const setLine = (i, k, v) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  const add = async () => {
+    const valid = lines.filter((l) => l.sku && l.units).map((l) => ({ sku: l.sku, units: Number(l.units) }));
+    if (!cost || !valid.length) return flash('Shipping cost and at least one product line are required', false);
+    try {
+      await api.createShipment({ totalShippingCost: Number(cost), reference: ref, lines: valid });
+      setCost(''); setRef(''); setLines([{ sku: '', units: '' }]); reload(); flash('Shipment added');
+    } catch (e) { flash(e.message, false); }
+  };
+  return (
+    <div className="panel" style={{ marginBottom: 22 }}>
+      <h2 style={{ fontSize: 17, marginBottom: 4 }}>Shipments (inbound)</h2>
+      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12 }}>Cost is split across the units below by product weight (set weight in Products).</p>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+        <Field label="Total shipping $"><input type="number" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
+        <Field label="Reference"><input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Amazon shipment ID" /></Field>
+      </div>
+      {lines.map((l, i) => (
+        <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+          <select value={l.sku} onChange={(e) => setLine(i, 'sku', e.target.value)} style={{ flex: 2, padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 8 }}>
+            <option value="">— product —</option>{skuOptions.map((s) => <option key={s.sku} value={s.sku}>{s.title.slice(0, 36)} ({s.sku})</option>)}
+          </select>
+          <input type="number" placeholder="units" value={l.units} onChange={(e) => setLine(i, 'units', e.target.value)} style={{ flex: 1, padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 8 }} />
+          {lines.length > 1 && <button className="btn btn-ghost btn-sm" onClick={() => setLines(lines.filter((_, j) => j !== i))}>×</button>}
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => setLines([...lines, { sku: '', units: '' }])}>+ Add product line</button>
+        <button className="btn" onClick={add}>Save shipment</button>
+      </div>
+      <CostTable rows={shipments} cols={[
+        ['Reference', (s) => s.reference || '—'],
+        ['Products', (s) => s.lines.map((l) => `${l.sku}×${l.units}`).join(', ')],
+        ['Total units', (s) => s.lines.reduce((a, l) => a + l.units, 0)],
+        ['Shipping', (s) => usd(s.totalShippingCost)],
+      ]} onDelete={(id) => api.deleteShipment(id).then(() => { reload(); flash('Deleted'); })} />
+    </div>
+  );
+}
+
+function OverheadSection({ overheads, reload, flash }) {
+  const [f, setF] = useState({ label: '', amount: '', date: '', recurring: false });
+  const add = async () => {
+    if (!f.label || !f.amount || !f.date) return flash('Label, amount and month are required', false);
+    try {
+      await api.createOverhead({ ...f, amount: Number(f.amount), date: new Date(f.date) });
+      setF({ label: '', amount: '', date: '', recurring: false }); reload(); flash('Overhead added');
+    } catch (e) { flash(e.message, false); }
+  };
+  return (
+    <div className="panel" style={{ marginBottom: 22 }}>
+      <h2 style={{ fontSize: 17, marginBottom: 4 }}>Overheads (rent, packaging, …)</h2>
+      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12 }}>Allocated across units sold within the Finance date range.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto auto', gap: 10, alignItems: 'end', marginBottom: 14 }}>
+        <Field label="Label"><input value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="Shop rent" /></Field>
+        <Field label="Amount $"><input type="number" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
+        <Field label="Month"><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+        <label className="check" style={{ paddingBottom: 10 }}><input type="checkbox" checked={f.recurring} onChange={(e) => setF({ ...f, recurring: e.target.checked })} /> Recurring</label>
+        <button className="btn" onClick={add}>Add</button>
+      </div>
+      <CostTable rows={overheads} cols={[
+        ['Label', (o) => o.label],
+        ['Amount', (o) => usd(o.amount)],
+        ['Month', (o) => new Date(o.date).toISOString().slice(0, 7)],
+        ['Recurring', (o) => (o.recurring ? 'Yes' : 'No')],
+      ]} onDelete={(id) => api.deleteOverhead(id).then(() => { reload(); flash('Deleted'); })} />
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return <div className="field" style={{ margin: 0 }}><label style={{ fontSize: 12 }}>{label}</label>{children}</div>;
+}
+
+function CostTable({ rows, cols, onDelete }) {
+  if (!rows.length) return <div className="empty" style={{ padding: 20 }}>None yet.</div>;
+  return (
+    <table>
+      <thead><tr>{cols.map((c) => <th key={c[0]}>{c[0]}</th>)}<th></th></tr></thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r._id}>
+            {cols.map((c) => <td key={c[0]} style={{ fontSize: 13 }}>{c[1](r)}</td>)}
+            <td><button className="btn btn-danger btn-sm" onClick={() => onDelete(r._id)}>Delete</button></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}

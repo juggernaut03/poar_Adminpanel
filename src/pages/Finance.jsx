@@ -267,9 +267,15 @@ export default function Finance() {
                     { label: 'Net after Amazon', value: profit.netAfterAmazon, kind: 'base' },
                     { label: 'Less: cost of goods', value: -profit.totalCogs, kind: 'neg' },
                     { label: 'Less: storage/service fees', value: profit.serviceFees, kind: 'neg' },
+                    ...(profit.overhead ? [{ label: `Less: overhead (rent etc.)`, value: profit.overhead, kind: 'neg' }] : []),
                     { label: 'Net profit', value: profit.netProfit, kind: 'total' },
                   ]}
                 />
+                {profit.overheadPerUnit > 0 && (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 10 }}>
+                    Overhead allocated at {usd(profit.overheadPerUnit)}/unit across {profit.unitsSold} units sold.
+                  </p>
+                )}
               </div>
             </div>
           )}

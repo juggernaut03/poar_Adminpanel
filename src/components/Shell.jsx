@@ -18,6 +18,7 @@ const NAV = [
     group: 'Business',
     items: [
       { to: '/finance', label: 'Finance & P&L' },
+      { to: '/costs', label: 'Costs & COGS' },
     ],
   },
   {
