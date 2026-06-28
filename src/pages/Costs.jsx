@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 
 const usd = (n) => (n == null ? '—' : (n < 0 ? '-' : '') + '$' + Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -22,6 +22,8 @@ export default function Costs() {
 
   const skuOptions = products.filter((p) => p.sku).map((p) => ({ sku: p.sku, title: p.title }));
   const titleFor = (sku) => skuOptions.find((s) => s.sku === sku)?.title || sku;
+  const weightBySku = {};
+  products.forEach((p) => { if (p.sku) weightBySku[p.sku] = p.weightGrams; });
 
   const flash = (t, ok = true) => { setMsg({ ok, t }); setTimeout(() => setMsg(null), 2500); };
 
@@ -60,7 +62,7 @@ export default function Costs() {
       </div>
 
       <PurchaseSection batches={batches} skuOptions={skuOptions} titleFor={titleFor} reload={reload} flash={flash} />
-      <ShipmentSection shipments={shipments} skuOptions={skuOptions} reload={reload} flash={flash} />
+      <ShipmentSection shipments={shipments} skuOptions={skuOptions} weightBySku={weightBySku} reload={reload} flash={flash} />
       <OverheadSection overheads={overheads} reload={reload} flash={flash} />
     </>
   );
@@ -95,11 +97,16 @@ function PurchaseSection({ batches, skuOptions, titleFor, reload, flash }) {
   );
 }
 
-function ShipmentSection({ shipments, skuOptions, reload, flash }) {
+function ShipmentSection({ shipments, skuOptions, weightBySku, reload, flash }) {
   const [cost, setCost] = useState('');
   const [ref, setRef] = useState('');
   const [lines, setLines] = useState([{ sku: '', units: '' }]);
+  const [fbaCost, setFbaCost] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const fbaRef = useRef(null);
   const setLine = (i, k, v) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+
   const add = async () => {
     const valid = lines.filter((l) => l.sku && l.units).map((l) => ({ sku: l.sku, units: Number(l.units) }));
     if (!cost || !valid.length) return flash('Shipping cost and at least one product line are required', false);
@@ -108,33 +115,119 @@ function ShipmentSection({ shipments, skuOptions, reload, flash }) {
       setCost(''); setRef(''); setLines([{ sku: '', units: '' }]); reload(); flash('Shipment added');
     } catch (e) { flash(e.message, false); }
   };
+
+  const onFba = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    try {
+      const r = await api.importFbaShipment(file, fbaCost);
+      flash(`${r.updated ? 'Updated' : 'Imported'} ${r.parsed.shipmentId}: ${r.parsed.lineCount} SKUs, ${r.parsed.totalUnits} units`);
+      setFbaCost(''); reload();
+    } catch (e2) { flash(e2.message, false); }
+    finally { setBusy(false); if (fbaRef.current) fbaRef.current.value = ''; }
+  };
+
+  // Per-SKU cost share for a shipment (same weight-split logic as the server).
+  const costShares = (s) => {
+    const totalW = s.lines.reduce((a, l) => a + (weightBySku[l.sku] || 1) * l.units, 0) || 1;
+    return s.lines.map((l) => {
+      const w = (weightBySku[l.sku] || 1) * l.units;
+      const share = (w / totalW) * (s.totalShippingCost || 0);
+      return { ...l, share, perUnit: share / l.units };
+    });
+  };
+
   return (
     <div className="panel" style={{ marginBottom: 22 }}>
       <h2 style={{ fontSize: 17, marginBottom: 4 }}>Shipments (inbound)</h2>
-      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 12 }}>Cost is split across the units below by product weight (set weight in Products).</p>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-        <Field label="Total shipping $"><input type="number" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
-        <Field label="Reference"><input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Amazon shipment ID" /></Field>
-      </div>
-      {lines.map((l, i) => (
-        <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-          <select value={l.sku} onChange={(e) => setLine(i, 'sku', e.target.value)} style={{ flex: 2, padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 8 }}>
-            <option value="">— product —</option>{skuOptions.map((s) => <option key={s.sku} value={s.sku}>{s.title.slice(0, 36)} ({s.sku})</option>)}
-          </select>
-          <input type="number" placeholder="units" value={l.units} onChange={(e) => setLine(i, 'units', e.target.value)} style={{ flex: 1, padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 8 }} />
-          {lines.length > 1 && <button className="btn btn-ghost btn-sm" onClick={() => setLines(lines.filter((_, j) => j !== i))}>×</button>}
+      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginBottom: 14 }}>
+        Cost is split across each shipment's units by product weight (set weight in Products).
+      </p>
+
+      {/* FBA TSV import */}
+      <div style={{ background: 'var(--soft, #f7f7f8)', border: '1px dashed var(--line)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>📦 Import from Amazon FBA shipment file</div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="number" step="0.01" placeholder="shipping cost $ (optional)" value={fbaCost} onChange={(e) => setFbaCost(e.target.value)}
+            style={{ padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 8, width: 200 }} />
+          <input ref={fbaRef} type="file" accept=".tsv,.csv,.txt" onChange={onFba} disabled={busy} />
+          {busy && <span className="hint">Importing…</span>}
         </div>
-      ))}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => setLines([...lines, { sku: '', units: '' }])}>+ Add product line</button>
-        <button className="btn" onClick={add}>Save shipment</button>
+        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>
+          Upload the .tsv from Amazon → auto-fills shipment ID + SKUs + units. Enter the cost now or edit later.
+        </div>
       </div>
-      <CostTable rows={shipments} cols={[
-        ['Reference', (s) => s.reference || '—'],
-        ['Products', (s) => s.lines.map((l) => `${l.sku}×${l.units}`).join(', ')],
-        ['Total units', (s) => s.lines.reduce((a, l) => a + l.units, 0)],
-        ['Shipping', (s) => usd(s.totalShippingCost)],
-      ]} onDelete={(id) => api.deleteShipment(id).then(() => { reload(); flash('Deleted'); })} />
+
+      <details style={{ marginBottom: 14 }}>
+        <summary style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 600, color: 'var(--brand)' }}>+ Add a shipment manually</summary>
+        <div style={{ display: 'flex', gap: 10, margin: '12px 0 10px' }}>
+          <Field label="Total shipping $"><input type="number" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} /></Field>
+          <Field label="Reference"><input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="shipment ID" /></Field>
+        </div>
+        {lines.map((l, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+            <select value={l.sku} onChange={(e) => setLine(i, 'sku', e.target.value)} style={{ flex: 2, padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 8 }}>
+              <option value="">— product —</option>{skuOptions.map((s) => <option key={s.sku} value={s.sku}>{s.title.slice(0, 36)} ({s.sku})</option>)}
+            </select>
+            <input type="number" placeholder="units" value={l.units} onChange={(e) => setLine(i, 'units', e.target.value)} style={{ flex: 1, padding: '9px 12px', border: '1px solid var(--line)', borderRadius: 8 }} />
+            {lines.length > 1 && <button className="btn btn-ghost btn-sm" onClick={() => setLines(lines.filter((_, j) => j !== i))}>×</button>}
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setLines([...lines, { sku: '', units: '' }])}>+ line</button>
+          <button className="btn" onClick={add}>Save shipment</button>
+        </div>
+      </details>
+
+      {/* Shipment list with expandable per-SKU detail */}
+      {shipments.length === 0 ? <div className="empty" style={{ padding: 20 }}>No shipments yet.</div> : (
+        <table>
+          <thead><tr><th>Shipment</th><th>Products</th><th>Units</th><th>Shipping</th><th></th></tr></thead>
+          <tbody>
+            {shipments.map((s) => {
+              const totalUnits = s.lines.reduce((a, l) => a + l.units, 0);
+              const isOpen = expanded === s._id;
+              return (
+                <Fragment key={s._id}>
+                  <tr>
+                    <td style={{ fontWeight: 600 }}>
+                      <button onClick={() => setExpanded(isOpen ? null : s._id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600, color: 'var(--brand)' }}>
+                        {isOpen ? '▾' : '▸'} {s.shipmentId || s.reference || 'shipment'}
+                      </button>
+                      {s.name && <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 400 }}>{s.name}</div>}
+                    </td>
+                    <td style={{ fontSize: 13 }}>{s.lines.length} SKUs</td>
+                    <td>{totalUnits}</td>
+                    <td style={{ fontWeight: 600 }}>{s.totalShippingCost ? usd(s.totalShippingCost) : <span style={{ color: '#b45309' }}>set cost</span>}</td>
+                    <td><button className="btn btn-danger btn-sm" onClick={() => api.deleteShipment(s._id).then(() => { reload(); flash('Deleted'); })}>Delete</button></td>
+                  </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={5} style={{ background: '#fafafa', padding: 0 }}>
+                        <table style={{ margin: 0 }}>
+                          <thead><tr><th>SKU</th><th>Units</th><th>Weight</th><th>Cost share</th><th>Per unit</th></tr></thead>
+                          <tbody>
+                            {costShares(s).map((l) => (
+                              <tr key={l.sku}>
+                                <td style={{ fontSize: 13 }}>{l.sku}</td>
+                                <td>{l.units}</td>
+                                <td style={{ fontSize: 13, color: 'var(--muted)' }}>{weightBySku[l.sku] ? `${weightBySku[l.sku]}g` : 'no weight'}</td>
+                                <td>{usd(l.share)}</td>
+                                <td style={{ fontWeight: 600 }}>{usd(l.perUnit)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

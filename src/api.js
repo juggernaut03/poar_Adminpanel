@@ -72,6 +72,12 @@ export const api = {
   listShipments: () => request('/admin/costs/shipments'),
   createShipment: (data) => request('/admin/costs/shipments', { method: 'POST', body: data }),
   deleteShipment: (id) => request(`/admin/costs/shipments/${id}`, { method: 'DELETE' }),
+  importFbaShipment: (file, cost) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const q = cost != null && cost !== '' ? `?cost=${encodeURIComponent(cost)}` : '';
+    return request(`/admin/costs/shipments/import-fba${q}`, { method: 'POST', body: fd, isForm: true });
+  },
   listOverheads: () => request('/admin/costs/overheads'),
   createOverhead: (data) => request('/admin/costs/overheads', { method: 'POST', body: data }),
   deleteOverhead: (id) => request(`/admin/costs/overheads/${id}`, { method: 'DELETE' }),
