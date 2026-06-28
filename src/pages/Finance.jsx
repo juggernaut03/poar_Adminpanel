@@ -137,9 +137,16 @@ export default function Finance() {
           </div>
 
           <div className="panel" style={{ marginBottom: 20, fontSize: 13, color: 'var(--muted)' }}>
+            {summary.coverage?.from && (
+              <div style={{ marginBottom: 6 }}>
+                <strong style={{ color: 'var(--brand)' }}>Data coverage:</strong>{' '}
+                {summary.coverage.from} → {summary.coverage.to}
+                {(range.from || range.to) && ' (filtered)'}
+              </div>
+            )}
             <strong style={{ color: 'var(--ink)' }}>Note:</strong> Net proceeds are after Amazon fees but before your product cost (COGS).
             Add per-product cost in Products to compute true net profit. Refund rate: <strong>{refundRate.toFixed(1)}%</strong> ·
-            Transactions: <strong>{summary.transactionCount}</strong>.
+            Transactions: <strong>{summary.transactionCount}</strong>. Reserve-balance entries are excluded.
           </div>
 
           {/* Sales trend */}
